@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bns-k8s-admissioncontroller-deployment
+  namespace: cap-admin
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: bns-k8s-admissioncontroller
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: bns-k8s-admissioncontroller
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: selectorLabel
+                operator: In
+                values:
+                - sys-common
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - bns-k8s-admissioncontroller
+            topologyKey: failure-domain.beta.kubernetes.io/zone
+      containers:
+      - args:
+        - -port=8443
+        - -tlsCertFile=/etc/webhook/certs/cert.pem
+        - -tlsKeyFile=/etc/webhook/certs/key.pem
+        - -alsologtostderr
+        - -v=4
+        - 2>&1
+        image: gcr.io/pbcie-0064-ciadbuild-2841a743/atco/admission-controller:1.0.5
+        imagePullPolicy: Always
+        name: bns-k8s-admissioncontroller
+        resources:
+          limits:
+            cpu: 10m
+            memory: 2Gi
+          requests:
+            cpu: 10m
+            memory: 1280Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/webhook/certs
+          name: webhook-certs
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: admission-controller-sa
+      serviceAccountName: admission-controller-sa
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - effect: NoExecute
+        key: bns.cap.dedicated
+        operator: Equal
+        value: sys-common.service
+      volumes:
+      - name: webhook-certs
+        secret:
+          defaultMode: 420
+          secretName: bns-k8s-admissioncontroller-certs
